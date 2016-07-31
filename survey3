@@ -1,0 +1,550 @@
+library(dplyr)
+library(ggplot2)
+library(VIM)
+library(stringr)
+library("ggthemes")
+#library("randomForest")
+#library("ROCR")
+#library("mice")
+library(scales)
+library(wesanderson)
+library(RColorBrewer)
+library(vcd)
+
+
+
+
+
+data_path <- file.path('c:', 'r data warehouse', 'nepal')
+setwd(data_path)
+getwd()
+
+
+data1 <- read.csv('survey3.csv')
+sum(is.na(data1))
+
+
+
+data1$Date<-as.character(data1$Date)
+data1$Date<- as.Date(data1$Date, format='%d/%m/%Y')
+
+data1$Submission_time <- as.character(data1$Submission_time)
+data1$Submission_time<- gsub('T.*', '', data1$Submission_time)
+data1$Submission_time <-as.Date(data1$Submission_time, format = '%Y-%m-%d')
+
+data1<-mutate(data1, Tot_Survey_Time_Day=as.numeric(Submission_time-Date))
+
+str(data1)
+
+table(data1$District, data1$First_Biggest_problem)
+
+
+cbPalette <- c("chartreuse1","firebrick1", "darkred", "deeppink4", "cyan1", "darkgreen", "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+########################
+#Problem addressed fill first biggest problem in male and female
+########################
+
+ggplot(data1, aes(x=Problem_addressed))+
+        geom_bar(aes(y=(..count..)/sum(..count..), fill=First_Biggest_problem))+
+        scale_y_continuous(labels = percent)+
+        facet_grid(~Gender)+
+        theme_bw()+scale_fill_manual(values=cbPalette)+
+        labs(title="Have your problem being addressed ?", x='Problems addressed', y= "Percent")+
+geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25) 
+
+
+str(data1)     
+
+m<- table(data1$Problem_addressed)
+m
+
+mosaicplot(m,col=c(2,3,4,5,6),main = "Problems being addressed?", xlab = "People who believe thier problems were addressed")
+
+district_g<- data1 %>% group_by(District, Problem_addressed) %>% summarise(n())
+head(district_g,20)
+
+class(district_g)
+district_g <-rename(district_g, problems=Problem_addressed)
+
+
+
+data1$Caste <- gsub('not mention', 'Not mentioned', data1$Caste)
+data1$Caste <- gsub('Not mentined', 'Not mentioned', data1$Caste)
+
+data1 <-within(data1, Caste <- factor(Caste, levels=names(sort(table(Caste)))))
+
+
+#######EG of table and sorting
+sort(table(data1$Caste), decreasing = T)
+
+d<- colorRampPalette(brewer.pal(8,"Dark2"))(24)
+tol21rainbow= c("chartreuse1","firebrick1", "darkred", "deeppink4","#771155", "#AA4488", "#CC99BB", "#114477", "#4477AA", "#77AADD", "#117777", "#44AAAA", "#77CCCC", "#117744", "#44AA77", "#88CCAA", "#777711", "#AAAA44", "#DDDD77", "#774411", "#AA7744", "#DDAA77", "#771122", "#AA4455", "#DD7788")
+                   
+ggplot(data1, aes(Caste, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        coord_flip()+scale_fill_manual(values=cbPalette)+
+        labs(y='Percent', title='Caste and thier 1st biggest problem')
+        
+
+str(geom_text)
+
+ggplot(data1, aes(Caste, fill=District))+geom_bar()+coord_flip()+scale_fill_manual(values=cbPalette)
+
+ggplot(data1, aes(District, fill=Caste))+geom_bar()+coord_flip()+scale_fill_manual(values=tol21rainbow)
+
+Tot_occupation<-data1 %>% group_by(Occupation) %>% summarise(n=n())
+
+head(Tot_occupation, 20)
+################################################################################################
+#I dont think this is way to think
+#I must find question then solve ans
+###############################################################################################
+
+#############
+#OK Q. First biggest problem and relation to it
+###############
+
+######################
+#its interesting coz ppl who said their prob have been address havent really adressed what thier 
+#1st big prob is
+########################
+ggplot(data1, aes(x=Problem_addressed))+
+        geom_bar(aes(y=(..count..)/sum(..count..), fill=First_Biggest_problem))+
+        scale_y_continuous(labels = percent)+
+        facet_grid(~Gender)+
+        theme_bw()+scale_fill_manual(values=cbPalette)+
+        labs(title="Have your problem being addressed ?", x='Problems addressed', y= "Percent")+
+        geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25) 
+
+###################
+#so we can clealy see that problems have not been addressed
+#and the majority are related to long term housing 
+#prob they lost thier home and atm living in temp shelter
+###################
+
+###################
+#anyways how is first big problem distributes
+###################
+
+summary(data1$First_Biggest_problem)
+
+t.first.prob <- table(data1$First_Biggest_problem)
+
+t.first.prob <-prop.table(t.first.prob)*100
+t.first.prob <- round(sort(t.first.prob, decreasing = T),2)
+t.first.prob <- as.data.frame(t.first.prob)
+t.first.prob
+t.first.prob <- rename(t.first.prob, Importance=t.first.prob)
+t.first.prob$Problems<-row.names(t.first.prob)
+
+
+rank.t.first.prob <- t.first.prob %>% mutate(Rank=paste0('#', dense_rank(desc(Importance))))
+str(rank.t.first.prob)
+
+##################
+#althought ranking is good doesnt show in percentage
+###################
+ggplot(rank.t.first.prob, aes(x=reorder(Problems, Importance), y=Importance, fill=Importance))+
+        geom_bar(stat='identity')+coord_flip()+geom_text(aes(x=Problems, label=Rank, y=5))+
+        labs(x='First Biggest Problems Ranked')
+       
+###we wont use abov ggplot
+str(data1)
+data1 <-within(data1, First_Biggest_problem <- factor(First_Biggest_problem, levels=names(sort(table(First_Biggest_problem)))))
+
+ggplot(data1, aes(First_Biggest_problem))+geom_bar(aes(y=(..count..)/sum(..count..),fill=First_Biggest_problem))+
+        scale_y_continuous(labels = percent)+
+        labs(x='First Biggest Problem', y='%')+
+        scale_fill_manual(values=cbPalette)+coord_flip()+theme_bw()+
+        geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -.25, nudge_y = 0.05) 
+        
+        
+ggplot(data1[data1$First_Biggest_problem !='Unknown',], aes(Caste, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        coord_flip()+scale_fill_manual(values=cbPalette)+
+        labs(y='Percent', title='Caste and thier 1st biggest problem')
+
+
+###############
+#lets look at people who were prepared for disaster and thier prob
+#i have removed unknown
+##############
+
+sel.prob<- c('Housing-Long term','Financial Support','Housing-Short term', 'Clean Water', "Healthcare")
+
+
+ggplot(data1[data1$First_Biggest_problem != 'Unknown',], aes(Prepared.for.Disaster))+
+        geom_bar(aes(y=(..count..)/sum(..count..), fill=First_Biggest_problem))+
+        scale_y_continuous(labels=percent)+
+        scale_fill_manual(values = cbPalette)+
+        labs(y='%', x='Prepared for Disaster ?')
+
+###what baout if we see thier age and ask them about if they were
+#prepare bout top 5 1st big prob
+
+ggplot(data1[data1$First_Biggest_problem %in% sel.prob,], aes(Prepared.for.Disaster))+
+        geom_bar(aes(y=(..count..)/sum(..count..), fill=First_Biggest_problem))+
+        scale_y_continuous(labels=percent)+
+        scale_fill_brewer(palette="Set1")+
+        labs(y='%', x='Prepared for Disaster ?', fill='Top 5 1st Biggest Problem')+
+        facet_grid(Gender~Age)+coord_flip()
+
+#####
+#we really cant say much from above graph
+#maybe combine strong agree n agree them we can see pattern?
+###
+
+summary(data1$First_Biggest_problem)
+
+##eg
+#data1[data1$First_Biggest_problem %in% sel.prob,]
+
+##########
+#if we just select top 5 first biggest problem and zoom in
+#################
+ggplot(data1[data1$First_Biggest_problem %in% sel.prob,], aes(Caste, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        coord_flip()+scale_fill_brewer(palette="Dark2")+
+        labs(y='Percent', title='Caste and thier 1st biggest problem',fill='Top 5 1st Biggest Problem')
+      
+################
+##half of the cast asked for Housing long term only 
+################
+
+str(data1)
+#####################
+#lets look at their occupation
+######################
+names(sort(table(data1$Occupation)))
+
+data1$Occupation <- gsub('Not mentioned', 'Not Mentioned', data1$Occupation)
+data1 <- within(data1, Occupation <- factor(Occupation, levels=names(sort(table(Occupation)))))
+
+ggplot(data1[data1$First_Biggest_problem %in% sel.prob, ], aes(Occupation, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+coord_flip()+
+        scale_y_continuous(labels = percent)+
+        labs(y='%', fill='Top 5 1st Biggest Problem')
+
+#################
+#just to see prop we exclude farmer
+
+##interesting to note NGO didnt want clean water
+
+ggplot(data1[data1$First_Biggest_problem %in% sel.prob & data1$Occupation !='Farmer', ], aes(Occupation, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+coord_flip()+
+        scale_y_continuous(labels = percent)+
+        labs(y='%', fill='Top 5 1st Biggest Problem')
+
+#####################
+#is support fair and 1st biggest prob
+
+ggplot(data1[data1$First_Biggest_problem %in% sel.prob,], aes(Is_Support_Fair))+
+        geom_bar()
+
+####just to make sense lets combine agree and stronhglt agree
+
+data2 <- data1
+summary(data2$Is_Support_Fair)
+str(data2$Is_Support_Fair)
+data2$Is_Support_Fair <- gsub('Strongly Agree', 'Agree', data2$Is_Support_Fair)
+data2$Is_Support_Fair <- gsub('Strongly Disagree', 'Disagree', data2$Is_Support_Fair)
+data2$Is_Support_Fair <- as.factor(data2$Is_Support_Fair)
+
+sel.prob2<- c('Housing-Long term','Financial Support','Housing-Short term', 'Clean Water', "Healthcare")
+
+ggplot(data2[data2$First_Biggest_problem %in% sel.prob2, ], aes(Is_Support_Fair, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+facet_grid(~District)
+###########
+#very hard to include district
+
+ggplot(data2[data2$First_Biggest_problem %in% sel.prob2, ], aes(Is_Support_Fair, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+facet_grid(~Satisfied_with_GOV_work)+coord_flip()
+
+data2$Satisfied_with_GOV_work <- gsub('Strongly Happy', 'Happy', data2$Satisfied_with_GOV_work)
+
+data2$Satisfied_with_GOV_work <- gsub('Strongly Unhappy', 'Unhappy', data2$Satisfied_with_GOV_work)
+data2$Satisfied_with_GOV_work <- as.factor(data2$Satisfied_with_GOV_work)
+str(data1)
+
+ggplot(data2[data2$First_Biggest_problem %in% sel.prob2, ], aes(Is_Support_Fair, fill=First_Biggest_problem))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+facet_grid(~Satisfied_with_GOV_work)+coord_flip()+
+        scale_y_continuous(labels = percent)+
+        labs(y='%', x='Is Support Fair ?', title='Satisfied with Gov work', fill='Top 5 1st Biggest Problem')
+
+ggplot(data2, aes(Satisfied_with_GOV_work, fill=Satisfied_with_GOV_work))+geom_bar()+scale_fill_brewer(palette='Set1', direction=-1)+facet_grid(~Gender)
+
+#########################
+#lets dwell in district
+##########################
+
+summary(data2$District)
+###ahhh the reason for shwoing 100 was due to fact that 100 sample for each district
+data2.1 <- within(data2[data2$First_Biggest_problem %in% sel.prob2,], District <- factor(District, levels=names(sort(table(District)))))
+
+ggplot(data2.1[data2.1$First_Biggest_problem %in% sel.prob2,], aes(District, fill=First_Biggest_problem))+
+        geom_bar()+coord_flip()
+
+
+ggplot(data2.1[data2.1$First_Biggest_problem %in% sel.prob2,], aes(District, fill=Caste))+
+        geom_bar()+ scale_fill_manual(values=tol21rainbow)
+#spineplot( data1$Gender,data1$Age)
+
+ggplot(data1, aes(District, fill=Caste))+geom_bar()+
+        scale_fill_manual(values=tol21rainbow)+coord_flip()
+
+
+
+
+#################################
+#Satisfied with NGO work
+#################################
+
+ggplot(data1, aes(Satisfied_with_NGO_work))+geom_bar()
+
+###########################
+#lets combine strongly agree and agree
+#######################
+
+data2$Satisfied_with_NGO_work <- gsub('Strongly Happy', 'Happy',data2$Satisfied_with_NGO_work )
+data2$Satisfied_with_NGO_work <- gsub('Strongly Unhappy', 'Unhappy',data2$Satisfied_with_NGO_work )
+
+ggplot(data2, aes(Satisfied_with_NGO_work, fill=Satisfied_with_NGO_work))+geom_bar()+
+        facet_grid(~Gender)+scale_fill_colorblind()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        labs(x='How satisfied are you with NGO work ?', fill='Satisfied with NGO work ?')
+
+##############################################
+#I think to look at how satisfied ppl are with GOV and NGo
+#we must zoom in further and look district wise
+# otherwise its not telling anything
+##############################################
+
+summary(data2$District)
+
+district1 <- c("Bhaktapur", 'Dhading', 'Dolakha','Kathmandu','Kavrepalanchok','Lalitpur')
+district2 <- c('Makwanpur', 'Nuwakot', 'Okhaldhunga', 'Ramechhap', 'Rasuwa', 'Sindhuli')
+district3 <- c('Sindhupalchowk','Gorkha')
+
+ggplot(data2[data2$District %in% district1, ], aes(Satisfied_with_GOV_work ,fill=Satisfied_with_GOV_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with GOV work ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district2, ], aes(Satisfied_with_GOV_work ,fill=Satisfied_with_GOV_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with GOV work ?')+
+        theme_bw()
+
+ggplot(data2[data2$District %in% district3, ], aes(Satisfied_with_GOV_work ,fill=Satisfied_with_GOV_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with GOV work ?')+
+        theme_bw()
+
+
+####################
+#ok  with same districts 1 2 3 what baout NGO worK
+
+ggplot(data2[data2$District %in% district1, ], aes(Satisfied_with_NGO_work, fill=Satisfied_with_NGO_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with NGO work ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district2, ], aes(Satisfied_with_NGO_work, fill=Satisfied_with_NGO_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with NGO work ?')+
+        theme_bw()
+
+ggplot(data2[data2$District %in% district3, ], aes(Satisfied_with_NGO_work, fill=Satisfied_with_NGO_work))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='How Satisfied are you with NGO work ?')+
+        theme_bw()
+
+###############################################################################
+
+
+
+prop.table(table(data1$Gender))*100
+
+###########we can see more males than female in survey
+
+ggplot(data2[data2$District %in% district1, ], aes(Is_Support_Fair, fill=Is_Support_Fair))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='Is the support you are receiving fair ?')+
+        theme_bw()
+
+ggplot(data2[data2$District %in% district2, ], aes(Is_Support_Fair, fill=Is_Support_Fair))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='Is the support you are receiving fair ?')+
+        theme_bw()
+
+
+
+ggplot(data2[data2$District %in% district3, ], aes(Is_Support_Fair, fill=Is_Support_Fair))+
+        geom_bar()+facet_grid(~District)+coord_flip()+
+        scale_fill_brewer(palette='Set1', direction=-1)+
+        guides(fill=FALSE)+
+        labs(x='Is the support you are receiving fair ?')+
+        theme_bw()
+
+
+###################################
+
+
+
+
+ggplot(data2[data2$District %in% district1 & data2$First_Needed_Information !='Unknown', ],aes(District, fill=First_Needed_Information))+
+               geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        scale_fill_colorblind()+
+        labs(x='District', y='%', fill='What is the most important information needed ?')+
+        theme_bw()
+
+ggplot(data2[data2$District %in% district2 & data2$First_Needed_Information !='Unknown', ],aes(District, fill=First_Needed_Information))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        scale_fill_colorblind()+
+        labs(x='District', y='%', fill='What is the most important information needed ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district3 & data2$First_Needed_Information !='Unknown', ],aes(District, fill=First_Needed_Information))+
+        geom_bar(aes(y=(..count..)/sum(..count..)))+
+        scale_y_continuous(labels = percent)+
+        scale_fill_colorblind()+
+        labs(x='District', y='%', fill='What is the most important information needed ?')+
+        theme_bw()
+
+
+##############################################################################
+
+
+
+str(data2)
+
+
+ggplot(data2[data2$District %in% district1 & data2$First_thing_GOV_must_Provide !='Unknown', ],aes(District, fill=First_thing_GOV_must_Provide))+
+        geom_bar()+
+                scale_fill_colorblind()+
+        labs(x='District', fill='What is the most important information needed ?')+
+        theme_bw()
+
+ggplot(data2[data2$District %in% district2 & data2$First_thing_GOV_must_Provide !='Unknown', ],aes(District, fill=First_thing_GOV_must_Provide))+
+        geom_bar()+
+        scale_fill_colorblind()+
+        labs(x='District', fill='What is the most important information needed ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district3 & data2$First_thing_GOV_must_Provide !='Unknown', ],aes(District, fill=First_thing_GOV_must_Provide))+
+        geom_bar()+
+        scale_fill_manual(values = cbPalette) +
+        labs(x='District', fill='What is the most important information needed ?')+
+        theme_bw()
+
+###################################################################
+
+str(data2)
+
+summary(data2$Interviewer)
+
+
+summary(data2$First_women_problem)
+
+#####################################################################3
+
+########first women problem
+
+#D2 = subset(data2$First_women_problem, !(V1 %in% c('B','N',T')))
+
+#fist.women.removed<- c('Unknown', 'Housing-Long term')
+
+ggplot(data2[data2$District %in% district1 & data2$First_women_problem !='Unknown'& data2$First_women_problem !='Housing-Long term', ],aes(District, fill=First_women_problem))+
+        geom_bar()+
+        scale_fill_manual(values=tol21rainbow)+
+        labs(x='District', fill='First Women problem ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district2 & data2$First_women_problem !='Unknown'& data2$First_women_problem !='Housing-Long term', ],aes(District, fill=First_women_problem))+
+        geom_bar()+
+        scale_fill_manual(values=tol21rainbow)+
+        labs(x='District', fill='First Women problem ?')+
+        theme_bw()
+
+
+ggplot(data2[data2$District %in% district3 & data2$First_women_problem !='Unknown'& data2$First_women_problem !='Housing-Long term', ],aes(District, fill=First_women_problem))+
+        geom_bar()+
+        scale_fill_manual(values=tol21rainbow)+
+        labs(x='District', fill='First Women problem ?')+
+        theme_bw()
+
+
+###############################USING dplyr + GGPLOT
+#df.car_spec_data %>%
+ # filter(top_speed_mph >149 & top_speed_mph <159) %>%
+   #                                                ggplot(aes(x= as.factor(top_speed_mph))) +
+   #                                                geom_bar(fill="#880011") +
+     #                                              labs(x="Top Speed, mph") +
+        #                                           theme.car_chart
+
+
+
+
+
+
+#################################################################################
+
+dat <- read.table(text = "    ONE TWO THREE
+1   23  234 324
+                  2   34  534 12
+                  3   56  324 124
+                  4   34  234 124
+                  5   123 534 654",sep = "",header = TRUE)
+
+dat
+rownames(dat)
+
+datm <- melt(cbind(dat, ind = rownames(dat)), id.vars = c('ind'))
+datm
+
+ggplot(datm,aes(x = variable, y = value,fill = ind)) + 
+        geom_bar(position = "fill",stat = "identity") + 
+        scale_y_continuous(labels = percent_format())
+
+
+#################################################################################
+
+
+
+#ggplot(data2[data2$District %in% district1 & data2$First_women_problem !=fist.women.removed, ],aes(x=District, y = (..count..)/sum(..count..),fill=First_women_problem))+
+ #       geom_bar()+
+ #               labs(x='District', fill='What is the most important information needed ?')+
+  #      theme_bw()+
+ #       stat_count(geom = "text",aes(label = paste(round((..count..)/sum(..count..)*100), "%")),
+  #               vjust = 5)
+
+############################
+
+ggsave('death_by_zone_ONLY.jpeg', device = 'jpeg', dpi=300, limitsize = F, scale = 2 )
